@@ -1,8 +1,7 @@
 <template>
-  <div>
-    <svg width="100%" height="400px" preserveAspectRatio="xMidYMid meet">
-      <!-- <g transform="matrix(0.649493 0 0 0.649493 50.806 -120.25)"> -->
-      <g>
+  <div :class="{ 'pan-mode': tool == 'pan' }">
+    <svg preserveAspectRatio:="xMidYMid meet" ref="svg">
+      <g :style="rootTransform">
 
         <g v-for="item in workflow.items" :key="item.id">
           <rect
@@ -31,11 +30,17 @@
           <text class="static-text" :x="item.x + 10" :y="item.y + 30">
             Train Model
           </text>
-
         </g>
       </g>
     </svg>
-    <hr />
+    <div class="controls">
+      <button type="button" @click="resetZoomAndPan">Reset</button>
+      <input class="zoom-slider" type="range" min="0.5" max="2" :value="zoom" @input="changeZoom($event.target.value)" step="0.05">
+      <label>
+        <input type="checkbox" :checked="tool == 'pan'" @change="toggleTool('pan')" />
+        Pan
+      </label>
+    </div>
   </div>
 </template>
 
@@ -48,6 +53,17 @@ import { Workflow } from '../flow/model/workflow';
 @Component
 export default class WorkflowCanvas extends Vue {
   workflow: WorkflowViewModel;
+  zoom: number = 1;
+  pan: { x: number; y: number; } = { x: 0, y: 0 };
+
+  tool: string | null = 'pan';
+
+  get rootTransform() {
+    const scale = this.zoom;
+    const xTranslation = this.pan.x;
+    const yTranslation = this.pan.y;
+    return `transform: matrix(${scale}, 0, 0, ${scale}, ${xTranslation}, ${yTranslation})`;
+  }
 
   constructor() {
     super();
@@ -58,11 +74,131 @@ export default class WorkflowCanvas extends Vue {
 
     this.workflow = new WorkflowViewModel(workflow);
   }
+
+  mounted() {
+    // TODO: use refs.svg
+    makeDraggable(
+      this.$refs.svg as SVGSVGElement,
+      () => this.tool,
+      (newX: number, newY: number) => {
+        this.pan = { x: newX, y: newY };
+      },
+      (element: Element, newX: number, newY: number) => {
+        const item = this.workflow.items[0]; // TODO: Identify
+        item.x = newX;
+        item.y = newY;
+      });
+  }
+
+  resetZoomAndPan() {
+    this.zoom = 1;
+    this.pan = { x: 0, y: 0 };
+  }
+
+  changeZoom(newValue: number) {
+    this.zoom = newValue;
+  }
+
+  toggleTool(tool: string) {
+    if (this.tool === tool) {
+      this.tool = null;
+    } else {
+      this.tool = tool;
+    }
+  }
+}
+
+function makeDraggable(svgElement: SVGSVGElement,
+  getTool: () => string,
+  updatePan: (newX: number, newY: number) => void,
+  updateItem: (element: Element, deltaX: number, deltaY: number) => void) {
+  svgElement.addEventListener('mousedown', startDrag);
+  svgElement.addEventListener('mousemove', drag);
+  svgElement.addEventListener('mouseup', endDrag);
+  //svgElement.addEventListener('mouseleave', endDrag);
+
+  const viewport: SVGSVGElement = svgElement.childNodes[0] as SVGSVGElement; // TODO: WRONG TYPE?;
+
+  let state: 'dragging' | null = null;
+  let selectedElement: Element | null = null;
+  let offset: { x: number; y: number };
+  let origin: { x: number; y: number };
+
+  let firstEventCTM: SVGMatrix | null = null;
+
+  function startDrag(evt: MouseEvent) {
+    const tool = getTool();
+
+    if (tool === 'pan') {
+      firstEventCTM = viewport.getCTM();
+      origin = getEventPoint(evt).matrixTransform(firstEventCTM.inverse());
+    } else {
+      offset = getMousePosition(evt);
+      selectedElement = evt.target as Element;
+      offset.x -= parseFloat(selectedElement.getAttributeNS(null, 'x'));
+      offset.y -= parseFloat(selectedElement.getAttributeNS(null, 'y'));
+    }
+
+    state = 'dragging';
+  }
+  function drag(evt: MouseEvent) {
+    if (state === 'dragging') {
+      evt.preventDefault();
+
+      const tool = getTool();
+
+      if (tool === 'pan') {
+        const point = getEventPoint(evt).matrixTransform(firstEventCTM.inverse());
+        const viewportCTM = firstEventCTM.translate(point.x - origin.x, point.y - origin.y);
+
+        updatePan(viewportCTM.e, viewportCTM.f);
+      } else {
+        // Moving?
+        const coord = getMousePosition(evt);
+        const deltaX = coord.x - offset.x;
+        const deltaY = coord.y - offset.y;
+
+        updateItem(<any>null, deltaX, deltaY);
+      }
+    }
+  }
+  function endDrag() {
+    state = null;
+    selectedElement = null;
+  }
+
+  function getMousePosition(evt: MouseEvent) {
+    const ctm = viewport.getScreenCTM();
+
+    if (!ctm) {
+      throw new Error('Could not get ctm');
+    }
+
+    return {
+      x: (evt.clientX - ctm.e) / ctm.a,
+      y: (evt.clientY - ctm.f) / ctm.d
+    };
+  }
+
+  function getEventPoint(evt: MouseEvent) {
+    const point = svgElement.createSVGPoint();
+    point.x = evt.clientX;
+    point.y = evt.clientY;
+    return point;
+  }
 }
 </script>
 
 <!-- Add "scoped" attribute to limit CSS to this component only -->
 <style scoped>
+.pan-mode {
+  cursor: all-scroll;
+}
+
+svg {
+  width: 100%;
+  height: 100%;
+}
 svg .item {
   stroke: #b3b3b3;
   stroke-width: 1px;
@@ -90,18 +226,16 @@ svg .port {
   fill: #fff;
 }
 
-h3 {
-  margin: 40px 0 0;
+.controls {
+  bottom: 0;
+  margin-left: 10px;
+  margin-bottom: 10px;
+  position: absolute;
+  height: 20px;
+  border: 1px solid green;
 }
-ul {
-  list-style-type: none;
-  padding: 0;
-}
-li {
-  display: inline-block;
-  margin: 0 10px;
-}
-a {
-  color: #42b983;
+
+.controls .zoom-slider {
+  width: 140px;
 }
 </style>
