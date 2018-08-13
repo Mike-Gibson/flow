@@ -11,11 +11,11 @@ export class ItemViewModel {
   text: string;
 
   get inputPorts() {
-    return this.item.inputPorts.map(createPort(this.item, true));
+    return this.item.inputPorts.map(createPort(this.x, this.y, true));
   }
 
   get outputPorts() {
-    return this.item.outputPorts.map(createPort(this.item, false));
+    return this.item.outputPorts.map(createPort(this.x, this.y, false));
   }
 
   constructor(private item: Item) {
@@ -29,9 +29,9 @@ const rectWidth = 150;
 const rectHeight = 60;
 const portCircleRadius = 5;
 
-const createPort = (item: Item, isInput: boolean) => (p: Port, index: number, allPorts: Port[]) => {
-  const x = item.viewInfo.left + (rectWidth / (allPorts.length + 1)) * (index + 1) - (portCircleRadius / 2);
-  const y = item.viewInfo.top + (isInput ? 0 : rectHeight);
+const createPort = (itemX: number, itemY: number, isInput: boolean) => (p: Port, index: number, allPorts: Port[]) => {
+  const x = itemX + (rectWidth / (allPorts.length + 1)) * (index + 1) - (portCircleRadius / 2);
+  const y = itemY + (isInput ? 0 : rectHeight);
   return {
     description: p.description,
     transform: `translate(${x}, ${y})`,

@@ -16,6 +16,7 @@
               <title>WOAH</title>
           </rect>
 
+<div>{{ item.inputPorts }} </div>
           <g class="port"
             v-for="port in item.inputPorts" :key="port.id"
             :transform="port.transform">
@@ -108,14 +109,15 @@ export default class WorkflowCanvas extends Vue {
   }
 }
 
-function makeDraggable(svgElement: SVGSVGElement,
-  getTool: () => string,
+function makeDraggable(
+  svgElement: SVGSVGElement,
+  getTool: () => string | null,
   updatePan: (newX: number, newY: number) => void,
   updateItem: (element: Element, deltaX: number, deltaY: number) => void) {
   svgElement.addEventListener('mousedown', startDrag);
   svgElement.addEventListener('mousemove', drag);
   svgElement.addEventListener('mouseup', endDrag);
-  //svgElement.addEventListener('mouseleave', endDrag);
+  // svgElement.addEventListener('mouseleave', endDrag);
 
   const viewport: SVGSVGElement = svgElement.childNodes[0] as SVGSVGElement; // TODO: WRONG TYPE?;
 
@@ -124,19 +126,19 @@ function makeDraggable(svgElement: SVGSVGElement,
   let offset: { x: number; y: number };
   let origin: { x: number; y: number };
 
-  let firstEventCTM: SVGMatrix | null = null;
+  let firstEventCTM: SVGMatrix;
 
   function startDrag(evt: MouseEvent) {
     const tool = getTool();
 
     if (tool === 'pan') {
-      firstEventCTM = viewport.getCTM();
+      firstEventCTM = viewport.getCTM()!;
       origin = getEventPoint(evt).matrixTransform(firstEventCTM.inverse());
     } else {
       offset = getMousePosition(evt);
-      selectedElement = evt.target as Element;
-      offset.x -= parseFloat(selectedElement.getAttributeNS(null, 'x'));
-      offset.y -= parseFloat(selectedElement.getAttributeNS(null, 'y'));
+      selectedElement = evt.target as Element; // TODO: Check can be dragged, bomb out if not
+      offset.x -= parseFloat(selectedElement.getAttributeNS('', 'x'));
+      offset.y -= parseFloat(selectedElement.getAttributeNS('', 'y'));
     }
 
     state = 'dragging';
@@ -158,7 +160,7 @@ function makeDraggable(svgElement: SVGSVGElement,
         const deltaX = coord.x - offset.x;
         const deltaY = coord.y - offset.y;
 
-        updateItem(<any>null, deltaX, deltaY);
+        updateItem(null as any, deltaX, deltaY);
       }
     }
   }
@@ -176,7 +178,7 @@ function makeDraggable(svgElement: SVGSVGElement,
 
     return {
       x: (evt.clientX - ctm.e) / ctm.a,
-      y: (evt.clientY - ctm.f) / ctm.d
+      y: (evt.clientY - ctm.f) / ctm.d,
     };
   }
 
